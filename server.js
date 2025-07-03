@@ -196,6 +196,22 @@ app.delete('/api/estoque/:categoria/limpar', authenticateToken, (req, res) => {
   res.json({ message: 'Categoria limpa' });
 });
 
+// Rota para importar estoque (para o bot)
+app.post('/api/estoque/import', authenticateToken, (req, res) => {
+  try {
+    const { estoque } = req.body;
+    
+    if (!estoque || typeof estoque !== 'object') {
+      return res.status(400).json({ error: 'Dados de estoque inválidos' });
+    }
+    
+    salvarEstoque(estoque);
+    res.json({ message: 'Estoque importado com sucesso' });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao importar estoque' });
+  }
+});
+
 // Servir o painel web na rota raiz
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
