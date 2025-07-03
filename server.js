@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
+const sqlite3 = require('sqlite3').verbose();
 require('dotenv').config();
 
 const app = express();
@@ -38,24 +39,70 @@ app.use(limiter);
 // Servir arquivos estáticos (painel web)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Arquivos de dados
-const estoquePath = path.resolve(__dirname, 'estoque.json');
-const equipePath = path.resolve(__dirname, 'equipe.json');
+// Banco de dados SQLite
+const db = new sqlite3.Database('estoque.db');
+
+// Inicializar banco
+db.serialize(() => {
+  db.run(`CREATE TABLE IF NOT EXISTS estoque (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    categoria TEXT UNIQUE,
+    dados TEXT,
+    preco REAL DEFAULT 0
+  )`);
+  
+  db.run(`CREATE TABLE IF NOT EXISTS equipe (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE,
+    nome TEXT,
+    cargo TEXT,
+    adicionadoEm TEXT
+  )`);
+});
 
 // Funções utilitárias
 function lerEstoque() {
-  if (!fs.existsSync(estoquePath)) {
-    fs.writeFileSync(estoquePath, JSON.stringify({}, null, 2));
-  }
-  try {
-    return JSON.parse(fs.readFileSync(estoquePath, 'utf-8'));
-  } catch (e) {
-    return {};
-  }
+  return new Promise((resolve) => {
+    db.all('SELECT * FROM estoque', (err, rows) => {
+      if (err) {
+        console.error('Erro ao ler estoque:', err);
+        resolve({});
+        return;
+      }
+      
+      const estoque = {};
+      rows.forEach(row => {
+        try {
+          const dados = JSON.parse(row.dados);
+          estoque[row.categoria] = {
+            ...dados,
+            preco: row.preco
+          };
+        } catch (e) {
+          console.error('Erro ao parsear dados:', e);
+        }
+      });
+      resolve(estoque);
+    });
+  });
 }
 
 function salvarEstoque(estoque) {
-  fs.writeFileSync(estoquePath, JSON.stringify(estoque, null, 2));
+  return new Promise((resolve) => {
+    db.serialize(() => {
+      db.run('DELETE FROM estoque');
+      
+      const stmt = db.prepare('INSERT INTO estoque (categoria, dados, preco) VALUES (?, ?, ?)');
+      
+      for (const categoria in estoque) {
+        const { preco, ...dados } = estoque[categoria];
+        stmt.run(categoria, JSON.stringify(dados), preco || 0);
+      }
+      
+      stmt.finalize();
+      resolve();
+    });
+  });
 }
 
 // Middleware de autenticação
@@ -87,52 +134,65 @@ app.post('/api/login', async (req, res) => {
 });
 
 // API Routes
-app.get('/api/estoque', authenticateToken, (req, res) => {
-  res.json(lerEstoque());
+app.get('/api/estoque', authenticateToken, async (req, res) => {
+  try {
+    const estoque = await lerEstoque();
+    res.json(estoque);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar estoque' });
+  }
 });
 
-app.get('/api/estoque/stats', authenticateToken, (req, res) => {
-  const estoque = lerEstoque();
-  const stats = {};
-  
-  for (const categoria in estoque) {
-    const item = estoque[categoria];
-    let quantidade = 0;
+app.get('/api/estoque/stats', authenticateToken, async (req, res) => {
+  try {
+    const estoque = await lerEstoque();
+    const stats = {};
     
-    if (item.cartoes) quantidade = item.cartoes.length;
-    else if (item.contas) quantidade = item.contas.length;
-    else if (item.codigos) quantidade = item.codigos.length;
+    for (const categoria in estoque) {
+      const item = estoque[categoria];
+      let quantidade = 0;
+      
+      if (item.cartoes) quantidade = item.cartoes.length;
+      else if (item.contas) quantidade = item.contas.length;
+      else if (item.codigos) quantidade = item.codigos.length;
+      
+      stats[categoria] = {
+        quantidade,
+        preco: item.preco || 0
+      };
+    }
     
-    stats[categoria] = {
-      quantidade,
-      preco: item.preco || 0
-    };
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar estatísticas' });
   }
-  
-  res.json(stats);
 });
 
-app.post('/api/estoque/categoria', authenticateToken, (req, res) => {
-  const { nome, tipo, preco } = req.body;
-  
-  if (!nome || !tipo) {
-    return res.status(400).json({ error: 'Nome e tipo são obrigatórios' });
+app.post('/api/estoque/categoria', authenticateToken, async (req, res) => {
+  try {
+    const { nome, tipo, preco } = req.body;
+    
+    if (!nome || !tipo) {
+      return res.status(400).json({ error: 'Nome e tipo são obrigatórios' });
+    }
+    
+    const estoque = await lerEstoque();
+    
+    if (estoque[nome]) {
+      return res.status(400).json({ error: 'Categoria já existe' });
+    }
+    
+    estoque[nome] = { preco: preco || 0 };
+    
+    if (tipo === 'cartao') estoque[nome].cartoes = [];
+    else if (tipo === 'conta') estoque[nome].contas = [];
+    else if (tipo === 'giftcard') estoque[nome].codigos = [];
+    
+    await salvarEstoque(estoque);
+    res.json({ message: 'Categoria criada com sucesso' });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao criar categoria' });
   }
-  
-  const estoque = lerEstoque();
-  
-  if (estoque[nome]) {
-    return res.status(400).json({ error: 'Categoria já existe' });
-  }
-  
-  estoque[nome] = { preco: preco || 0 };
-  
-  if (tipo === 'cartao') estoque[nome].cartoes = [];
-  else if (tipo === 'conta') estoque[nome].contas = [];
-  else if (tipo === 'giftcard') estoque[nome].codigos = [];
-  
-  salvarEstoque(estoque);
-  res.json({ message: 'Categoria criada com sucesso' });
 });
 
 app.post('/api/estoque/:categoria/itens', authenticateToken, (req, res) => {
