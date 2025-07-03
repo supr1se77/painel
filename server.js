@@ -195,80 +195,161 @@ app.post('/api/estoque/categoria', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/estoque/:categoria/itens', authenticateToken, (req, res) => {
-  const { categoria } = req.params;
-  const { itens, tipo } = req.body;
-  
-  if (!itens || !Array.isArray(itens)) {
-    return res.status(400).json({ error: 'Itens deve ser um array' });
+app.post('/api/estoque/:categoria/itens', authenticateToken, async (req, res) => {
+  try {
+    const { categoria } = req.params;
+    const { itens, tipo } = req.body;
+    
+    if (!itens || !Array.isArray(itens)) {
+      return res.status(400).json({ error: 'Itens deve ser um array' });
+    }
+    
+    const estoque = await lerEstoque();
+    
+    if (!estoque[categoria]) {
+      return res.status(404).json({ error: 'Categoria não encontrada' });
+    }
+    
+    if (tipo === 'cartao' && estoque[categoria].cartoes) {
+      estoque[categoria].cartoes.push(...itens);
+    } else if (tipo === 'conta' && estoque[categoria].contas) {
+      estoque[categoria].contas.push(...itens);
+    } else if (tipo === 'giftcard' && estoque[categoria].codigos) {
+      estoque[categoria].codigos.push(...itens);
+    } else {
+      return res.status(400).json({ error: 'Tipo inválido' });
+    }
+    
+    await salvarEstoque(estoque);
+    res.json({ message: `${itens.length} itens adicionados` });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao adicionar itens' });
   }
-  
-  const estoque = lerEstoque();
-  
-  if (!estoque[categoria]) {
-    return res.status(404).json({ error: 'Categoria não encontrada' });
-  }
-  
-  if (tipo === 'cartao' && estoque[categoria].cartoes) {
-    estoque[categoria].cartoes.push(...itens);
-  } else if (tipo === 'conta' && estoque[categoria].contas) {
-    estoque[categoria].contas.push(...itens);
-  } else if (tipo === 'giftcard' && estoque[categoria].codigos) {
-    estoque[categoria].codigos.push(...itens);
-  } else {
-    return res.status(400).json({ error: 'Tipo inválido' });
-  }
-  
-  salvarEstoque(estoque);
-  res.json({ message: `${itens.length} itens adicionados` });
 });
 
-app.put('/api/estoque/:categoria/preco', authenticateToken, (req, res) => {
-  const { categoria } = req.params;
-  const { preco } = req.body;
-  
-  const estoque = lerEstoque();
-  
-  if (!estoque[categoria]) {
-    return res.status(404).json({ error: 'Categoria não encontrada' });
+app.put('/api/estoque/:categoria/preco', authenticateToken, async (req, res) => {
+  try {
+    const { categoria } = req.params;
+    const { preco } = req.body;
+    
+    const estoque = await lerEstoque();
+    
+    if (!estoque[categoria]) {
+      return res.status(404).json({ error: 'Categoria não encontrada' });
+    }
+    
+    estoque[categoria].preco = preco;
+    await salvarEstoque(estoque);
+    res.json({ message: 'Preço atualizado' });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao atualizar preço' });
   }
-  
-  estoque[categoria].preco = preco;
-  salvarEstoque(estoque);
-  res.json({ message: 'Preço atualizado' });
 });
 
-app.delete('/api/estoque/:categoria', authenticateToken, (req, res) => {
-  const { categoria } = req.params;
-  const estoque = lerEstoque();
-  
-  if (!estoque[categoria]) {
-    return res.status(404).json({ error: 'Categoria não encontrada' });
+app.delete('/api/estoque/:categoria', authenticateToken, async (req, res) => {
+  try {
+    const { categoria } = req.params;
+    const estoque = await lerEstoque();
+    
+    if (!estoque[categoria]) {
+      return res.status(404).json({ error: 'Categoria não encontrada' });
+    }
+    
+    delete estoque[categoria];
+    await salvarEstoque(estoque);
+    res.json({ message: 'Categoria removida' });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao remover categoria' });
   }
-  
-  delete estoque[categoria];
-  salvarEstoque(estoque);
-  res.json({ message: 'Categoria removida' });
 });
 
-app.delete('/api/estoque/:categoria/limpar', authenticateToken, (req, res) => {
-  const { categoria } = req.params;
-  const estoque = lerEstoque();
-  
-  if (!estoque[categoria]) {
-    return res.status(404).json({ error: 'Categoria não encontrada' });
+app.delete('/api/estoque/:categoria/limpar', authenticateToken, async (req, res) => {
+  try {
+    const { categoria } = req.params;
+    const estoque = await lerEstoque();
+    
+    if (!estoque[categoria]) {
+      return res.status(404).json({ error: 'Categoria não encontrada' });
+    }
+    
+    if (estoque[categoria].cartoes) estoque[categoria].cartoes = [];
+    if (estoque[categoria].contas) estoque[categoria].contas = [];
+    if (estoque[categoria].codigos) estoque[categoria].codigos = [];
+    
+    await salvarEstoque(estoque);
+    res.json({ message: 'Categoria limpa' });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao limpar categoria' });
   }
-  
-  if (estoque[categoria].cartoes) estoque[categoria].cartoes = [];
-  if (estoque[categoria].contas) estoque[categoria].contas = [];
-  if (estoque[categoria].codigos) estoque[categoria].codigos = [];
-  
-  salvarEstoque(estoque);
-  res.json({ message: 'Categoria limpa' });
+});
+
+// Rota para obter itens de uma categoria
+app.get('/api/estoque/:categoria/itens', authenticateToken, async (req, res) => {
+  try {
+    const { categoria } = req.params;
+    const estoque = await lerEstoque();
+    
+    if (!estoque[categoria]) {
+      return res.status(404).json({ error: 'Categoria não encontrada' });
+    }
+    
+    let itens = [];
+    let tipo = '';
+    
+    if (estoque[categoria].cartoes) {
+      itens = estoque[categoria].cartoes.map((item, index) => ({ id: index, content: item, type: 'cartao' }));
+      tipo = 'cartao';
+    } else if (estoque[categoria].contas) {
+      itens = estoque[categoria].contas.map((item, index) => ({ id: index, content: item, type: 'conta' }));
+      tipo = 'conta';
+    } else if (estoque[categoria].codigos) {
+      itens = estoque[categoria].codigos.map((item, index) => ({ id: index, content: item, type: 'giftcard' }));
+      tipo = 'giftcard';
+    }
+    
+    res.json({ itens, tipo, categoria });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar itens' });
+  }
+});
+
+// Rota para remover item específico
+app.delete('/api/estoque/:categoria/item/:index', authenticateToken, async (req, res) => {
+  try {
+    const { categoria, index } = req.params;
+    const itemIndex = parseInt(index);
+    const estoque = await lerEstoque();
+    
+    if (!estoque[categoria]) {
+      return res.status(404).json({ error: 'Categoria não encontrada' });
+    }
+    
+    let removido = false;
+    
+    if (estoque[categoria].cartoes && itemIndex < estoque[categoria].cartoes.length) {
+      estoque[categoria].cartoes.splice(itemIndex, 1);
+      removido = true;
+    } else if (estoque[categoria].contas && itemIndex < estoque[categoria].contas.length) {
+      estoque[categoria].contas.splice(itemIndex, 1);
+      removido = true;
+    } else if (estoque[categoria].codigos && itemIndex < estoque[categoria].codigos.length) {
+      estoque[categoria].codigos.splice(itemIndex, 1);
+      removido = true;
+    }
+    
+    if (removido) {
+      await salvarEstoque(estoque);
+      res.json({ message: 'Item removido com sucesso' });
+    } else {
+      res.status(404).json({ error: 'Item não encontrado' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao remover item' });
+  }
 });
 
 // Rota para importar estoque (para o bot)
-app.post('/api/estoque/import', authenticateToken, (req, res) => {
+app.post('/api/estoque/import', authenticateToken, async (req, res) => {
   try {
     const { estoque } = req.body;
     
@@ -276,7 +357,7 @@ app.post('/api/estoque/import', authenticateToken, (req, res) => {
       return res.status(400).json({ error: 'Dados de estoque inválidos' });
     }
     
-    salvarEstoque(estoque);
+    await salvarEstoque(estoque);
     res.json({ message: 'Estoque importado com sucesso' });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao importar estoque' });
