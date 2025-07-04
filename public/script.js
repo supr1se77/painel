@@ -1003,3 +1003,250 @@ async function importEstoque() {
         console.error('Erro:', error);
     }
 }
+
+// Funções do sistema de vendas
+function showSalesModal() {
+    const modal = new bootstrap.Modal(document.getElementById('salesModal'));
+    loadSalesData();
+    modal.show();
+}
+
+async function loadSalesData() {
+    try {
+        // Carregar estatísticas
+        const statsResponse = await fetch(`${API_BASE_URL}/sales/stats`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        
+        if (statsResponse.ok) {
+            const stats = await statsResponse.json();
+            updateSalesStats(stats);
+        }
+        
+        // Carregar histórico de vendas
+        loadSalesHistory();
+        loadCustomers();
+        loadAnalytics();
+    } catch (error) {
+        console.error('Erro ao carregar dados de vendas:', error);
+    }
+}
+
+function updateSalesStats(stats) {
+    document.getElementById('totalRevenue').textContent = `R$ ${stats.totalRevenue.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    document.getElementById('totalSales').textContent = stats.totalSales.toLocaleString();
+    document.getElementById('totalCustomers').textContent = stats.totalCustomers.toLocaleString();
+    document.getElementById('todayRevenue').textContent = `R$ ${stats.todayRevenue.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+}
+
+async function loadSalesHistory() {
+    const salesList = document.getElementById('salesHistoryList');
+    salesList.innerHTML = '<div class="text-center py-4"><div class="spinner-border"></div><p class="mt-2">Carregando vendas...</p></div>';
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/sales/history`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        
+        if (response.ok) {
+            const sales = await response.json();
+            displaySalesHistory(sales);
+        } else {
+            salesList.innerHTML = '<div class="alert alert-warning">Nenhuma venda encontrada</div>';
+        }
+    } catch (error) {
+        salesList.innerHTML = '<div class="alert alert-danger">Erro ao carregar vendas</div>';
+    }
+}
+
+function displaySalesHistory(sales) {
+    const salesList = document.getElementById('salesHistoryList');
+    
+    if (sales.length === 0) {
+        salesList.innerHTML = `
+            <div class="text-center py-5">
+                <i class="fas fa-shopping-cart fa-4x mb-3" style="color: rgba(120, 119, 198, 0.5);"></i>
+                <h6 style="color: rgba(255,255,255,0.8);">Nenhuma venda registrada</h6>
+                <p style="color: rgba(255,255,255,0.6);">As vendas aparecerão aqui automaticamente</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    sales.forEach(sale => {
+        const data = new Date(sale.created_at).toLocaleString('pt-BR');
+        html += `
+            <div class="sales-item">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="fas fa-user-circle me-2" style="color: #7877c6;"></i>
+                            <strong style="color: #fff;">${sale.customer_name}</strong>
+                            <span class="badge ms-2" style="background: rgba(120, 119, 198, 0.3);">${sale.customer_id}</span>
+                        </div>
+                        <div class="mb-2">
+                            <i class="fas fa-box me-2" style="color: #ff77c6;"></i>
+                            <span style="color: rgba(255,255,255,0.9);">${sale.product_name}</span>
+                            <span style="color: rgba(255,255,255,0.6);"> • ${sale.category}</span>
+                        </div>
+                        <div>
+                            <i class="fas fa-clock me-2" style="color: rgba(255,255,255,0.6);"></i>
+                            <small style="color: rgba(255,255,255,0.6);">${data}</small>
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <div class="h5 mb-1" style="color: #27ae60;">R$ ${sale.price.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
+                        <span class="badge" style="background: #27ae60;">Concluída</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    salesList.innerHTML = html;
+}
+
+async function loadCustomers() {
+    const customersList = document.getElementById('customersList');
+    customersList.innerHTML = '<div class="text-center py-4"><div class="spinner-border"></div><p class="mt-2">Carregando clientes...</p></div>';
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/sales/customers`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        
+        if (response.ok) {
+            const customers = await response.json();
+            displayCustomers(customers);
+        } else {
+            customersList.innerHTML = '<div class="alert alert-warning">Nenhum cliente encontrado</div>';
+        }
+    } catch (error) {
+        customersList.innerHTML = '<div class="alert alert-danger">Erro ao carregar clientes</div>';
+    }
+}
+
+function displayCustomers(customers) {
+    const customersList = document.getElementById('customersList');
+    
+    if (customers.length === 0) {
+        customersList.innerHTML = `
+            <div class="text-center py-5">
+                <i class="fas fa-users fa-4x mb-3" style="color: rgba(120, 119, 198, 0.5);"></i>
+                <h6 style="color: rgba(255,255,255,0.8);">Nenhum cliente registrado</h6>
+                <p style="color: rgba(255,255,255,0.6);">Os clientes aparecerão após as primeiras vendas</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    customers.forEach(customer => {
+        const ultimaCompra = new Date(customer.last_purchase).toLocaleDateString('pt-BR');
+        html += `
+            <div class="customer-item">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center">
+                        <div class="customer-avatar me-3">
+                            <i class="fas fa-user-circle" style="font-size: 2.5rem; color: #7877c6;"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-1" style="color: #fff;">${customer.name}</h6>
+                            <p class="mb-1" style="color: rgba(255,255,255,0.7); font-size: 0.9rem;">ID: ${customer.customer_id}</p>
+                            <small style="color: rgba(255,255,255,0.6);">Última compra: ${ultimaCompra}</small>
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <div class="mb-1">
+                            <span class="badge" style="background: #7877c6; margin-right: 5px;">${customer.total_purchases} compras</span>
+                        </div>
+                        <div class="h6 mb-0" style="color: #27ae60;">R$ ${customer.total_spent.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    customersList.innerHTML = html;
+}
+
+async function loadAnalytics() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/sales/analytics`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        
+        if (response.ok) {
+            const analytics = await response.json();
+            displayTopProducts(analytics.topProducts);
+            displayTopCustomers(analytics.topCustomers);
+        }
+    } catch (error) {
+        console.error('Erro ao carregar analytics:', error);
+    }
+}
+
+function displayTopProducts(products) {
+    const topProducts = document.getElementById('topProducts');
+    
+    if (products.length === 0) {
+        topProducts.innerHTML = '<p style="color: rgba(255,255,255,0.6); text-align: center;">Nenhum dado disponível</p>';
+        return;
+    }
+    
+    let html = '';
+    products.forEach((product, index) => {
+        html += `
+            <div class="product-rank">
+                <div class="rank-number">${index + 1}</div>
+                <div class="rank-info">
+                    <div class="rank-name">${product.name}</div>
+                    <div class="rank-details">${product.sales_count} vendas</div>
+                </div>
+                <div class="rank-value">R$ ${product.total_revenue.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
+            </div>
+        `;
+    });
+    
+    topProducts.innerHTML = html;
+}
+
+function displayTopCustomers(customers) {
+    const topCustomers = document.getElementById('topCustomers');
+    
+    if (customers.length === 0) {
+        topCustomers.innerHTML = '<p style="color: rgba(255,255,255,0.6); text-align: center;">Nenhum dado disponível</p>';
+        return;
+    }
+    
+    let html = '';
+    customers.forEach((customer, index) => {
+        html += `
+            <div class="product-rank">
+                <div class="rank-number">${index + 1}</div>
+                <div class="rank-info">
+                    <div class="rank-name">${customer.name}</div>
+                    <div class="rank-details">${customer.total_purchases} compras</div>
+                </div>
+                <div class="rank-value">R$ ${customer.total_spent.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
+            </div>
+        `;
+    });
+    
+    topCustomers.innerHTML = html;
+}
+
+function filterSales() {
+    // Implementar filtro de vendas
+    loadSalesHistory();
+}
+
+function searchCustomers() {
+    // Implementar busca de clientes
+    loadCustomers();
+}
+
+function exportSalesReport() {
+    showAlert('Funcionalidade em desenvolvimento', 'info');
+}

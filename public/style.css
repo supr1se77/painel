@@ -708,6 +708,171 @@ body::before {
     background: linear-gradient(45deg, rgba(39, 174, 96, 0.2), rgba(39, 174, 96, 0.1));
 }
 
+.control-btn-sales:hover {
+    background: linear-gradient(45deg, rgba(52, 152, 219, 0.2), rgba(52, 152, 219, 0.1));
+}
+
+/* Sales Modal Styles */
+.sales-stat-card {
+    background: rgba(26, 26, 46, 0.8);
+    border: 1px solid rgba(120, 119, 198, 0.2);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    transition: all 0.3s ease;
+    margin-bottom: 15px;
+}
+
+.sales-stat-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(120, 119, 198, 0.4);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+}
+
+.stat-icon {
+    width: 50px;
+    height: 50px;
+    background: linear-gradient(45deg, #7877c6, #ff77c6);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    font-size: 20px;
+    color: white;
+}
+
+.stat-content h4 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 5px;
+}
+
+.stat-content p {
+    color: rgba(255,255,255,0.7);
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.sales-tabs .nav-link {
+    background: rgba(26, 26, 46, 0.6);
+    border: 1px solid rgba(120, 119, 198, 0.2);
+    color: rgba(255,255,255,0.7);
+    border-radius: 8px;
+    margin-right: 10px;
+    transition: all 0.3s ease;
+}
+
+.sales-tabs .nav-link:hover {
+    background: rgba(120, 119, 198, 0.2);
+    color: #fff;
+    border-color: rgba(120, 119, 198, 0.4);
+}
+
+.sales-tabs .nav-link.active {
+    background: linear-gradient(45deg, #7877c6, #ff77c6);
+    border-color: transparent;
+    color: white;
+}
+
+.sales-filters .form-select,
+.sales-filters .form-control {
+    background: rgba(26, 26, 46, 0.8);
+    border: 1px solid rgba(120, 119, 198, 0.3);
+    color: #fff;
+    width: 200px;
+}
+
+.sales-item {
+    background: rgba(26, 26, 46, 0.6);
+    border: 1px solid rgba(120, 119, 198, 0.2);
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 10px;
+    transition: all 0.3s ease;
+}
+
+.sales-item:hover {
+    border-color: rgba(120, 119, 198, 0.4);
+    transform: translateX(5px);
+}
+
+.customer-item {
+    background: rgba(26, 26, 46, 0.6);
+    border: 1px solid rgba(120, 119, 198, 0.2);
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 10px;
+    transition: all 0.3s ease;
+}
+
+.customer-item:hover {
+    border-color: rgba(120, 119, 198, 0.4);
+    transform: translateX(5px);
+}
+
+.analytics-card {
+    background: rgba(26, 26, 46, 0.6);
+    border: 1px solid rgba(120, 119, 198, 0.2);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.analytics-card h6 {
+    color: #fff;
+    margin-bottom: 15px;
+    font-weight: 600;
+}
+
+.product-rank {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(120, 119, 198, 0.1);
+}
+
+.product-rank:last-child {
+    border-bottom: none;
+}
+
+.rank-number {
+    width: 30px;
+    height: 30px;
+    background: linear-gradient(45deg, #7877c6, #ff77c6);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.rank-info {
+    flex: 1;
+    margin-left: 15px;
+}
+
+.rank-name {
+    color: #fff;
+    font-weight: 500;
+    margin-bottom: 2px;
+}
+
+.rank-details {
+    color: rgba(255,255,255,0.6);
+    font-size: 0.85rem;
+}
+
+.rank-value {
+    color: #7877c6;
+    font-weight: 600;
+}
+
 .control-btn-warning:hover {
     background: linear-gradient(45deg, rgba(243, 156, 18, 0.2), rgba(243, 156, 18, 0.1));
 }

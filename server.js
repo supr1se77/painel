@@ -65,6 +65,16 @@ db.serialize(() => {
     size INTEGER,
     created_at TEXT
   )`);
+  
+  db.run(`CREATE TABLE IF NOT EXISTS sales (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id TEXT,
+    customer_name TEXT,
+    product_name TEXT,
+    category TEXT,
+    price REAL,
+    created_at TEXT
+  )`);
 });
 
 // Funções utilitárias
@@ -480,6 +490,126 @@ app.get('/api/backup/download/:id', authenticateToken, (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename=backup-${id}.json`);
     res.send(row.dados);
   });
+});
+
+// Rotas do sistema de vendas
+app.get('/api/sales/stats', authenticateToken, (req, res) => {
+  const today = new Date().toISOString().split('T')[0];
+  
+  db.all(`
+    SELECT 
+      COUNT(*) as totalSales,
+      COALESCE(SUM(price), 0) as totalRevenue,
+      COUNT(DISTINCT customer_id) as totalCustomers,
+      COALESCE(SUM(CASE WHEN DATE(created_at) = ? THEN price ELSE 0 END), 0) as todayRevenue
+    FROM sales
+  `, [today], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: 'Erro ao buscar estatísticas' });
+    }
+    
+    const stats = rows[0] || {
+      totalSales: 0,
+      totalRevenue: 0,
+      totalCustomers: 0,
+      todayRevenue: 0
+    };
+    
+    res.json(stats);
+  });
+});
+
+app.get('/api/sales/history', authenticateToken, (req, res) => {
+  db.all('SELECT * FROM sales ORDER BY created_at DESC LIMIT 50', (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: 'Erro ao buscar histórico' });
+    }
+    res.json(rows);
+  });
+});
+
+app.get('/api/sales/customers', authenticateToken, (req, res) => {
+  db.all(`
+    SELECT 
+      customer_id,
+      customer_name as name,
+      COUNT(*) as total_purchases,
+      SUM(price) as total_spent,
+      MAX(created_at) as last_purchase
+    FROM sales 
+    GROUP BY customer_id, customer_name 
+    ORDER BY total_spent DESC
+  `, (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: 'Erro ao buscar clientes' });
+    }
+    res.json(rows);
+  });
+});
+
+app.get('/api/sales/analytics', authenticateToken, (req, res) => {
+  const queries = {
+    topProducts: `
+      SELECT 
+        product_name as name,
+        category,
+        COUNT(*) as sales_count,
+        SUM(price) as total_revenue
+      FROM sales 
+      GROUP BY product_name, category 
+      ORDER BY sales_count DESC 
+      LIMIT 5
+    `,
+    topCustomers: `
+      SELECT 
+        customer_name as name,
+        COUNT(*) as total_purchases,
+        SUM(price) as total_spent
+      FROM sales 
+      GROUP BY customer_id, customer_name 
+      ORDER BY total_spent DESC 
+      LIMIT 5
+    `
+  };
+  
+  const results = {};
+  let completed = 0;
+  
+  Object.keys(queries).forEach(key => {
+    db.all(queries[key], (err, rows) => {
+      if (!err) {
+        results[key] = rows;
+      } else {
+        results[key] = [];
+      }
+      
+      completed++;
+      if (completed === Object.keys(queries).length) {
+        res.json(results);
+      }
+    });
+  });
+});
+
+app.post('/api/sales/add', authenticateToken, (req, res) => {
+  const { customer_id, customer_name, product_name, category, price } = req.body;
+  
+  if (!customer_id || !customer_name || !product_name || !price) {
+    return res.status(400).json({ error: 'Dados obrigatórios faltando' });
+  }
+  
+  const stmt = db.prepare('INSERT INTO sales (customer_id, customer_name, product_name, category, price, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+  stmt.run(customer_id, customer_name, product_name, category, price, new Date().toISOString(), function(err) {
+    if (err) {
+      return res.status(500).json({ error: 'Erro ao registrar venda' });
+    }
+    
+    res.json({ 
+      message: 'Venda registrada com sucesso',
+      id: this.lastID
+    });
+  });
+  stmt.finalize();
 });
 
 // Servir o painel web na rota raiz
