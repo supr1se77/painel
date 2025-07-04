@@ -695,5 +695,5 @@ process.on('SIGTERM', () => {
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
-  console.log(`Banco de dados: ${dbPath}`);
+  console.log('Banco PostgreSQL conectado!');
 });
