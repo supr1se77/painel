@@ -67,12 +67,14 @@ function showDashboard() {
 // Atualizar informações do usuário
 function updateUserInfo() {
     const userRole = localStorage.getItem('userRole') || 'admin';
+    const userName = localStorage.getItem('userName') || '';
+    const userCargo = localStorage.getItem('userCargo') || '';
     const userInfo = document.getElementById('userInfo');
     
     if (userRole === 'admin') {
         userInfo.innerHTML = '<i class="fas fa-crown me-1" style="color: #ffd700;"></i>Administrador';
     } else {
-        userInfo.innerHTML = '<i class="fas fa-user me-1" style="color: #7877c6;"></i>Equipe Legacy';
+        userInfo.innerHTML = `<i class="fas fa-user me-1" style="color: #7877c6;"></i>${userName} - ${userCargo}`;
     }
 }
 
@@ -103,6 +105,11 @@ loginForm.addEventListener('submit', async function(e) {
             authToken = data.token;
             localStorage.setItem('authToken', authToken);
             localStorage.setItem('userRole', data.role || 'admin');
+            
+            // Salvar informações da equipe se existirem
+            if (data.nome) localStorage.setItem('userName', data.nome);
+            if (data.cargo) localStorage.setItem('userCargo', data.cargo);
+            
             showAlert('Login realizado com sucesso!', 'success');
             showDashboard();
         } else {
@@ -118,6 +125,8 @@ loginForm.addEventListener('submit', async function(e) {
 function logout() {
     localStorage.removeItem('authToken');
     localStorage.removeItem('userRole');
+    localStorage.removeItem('userName');
+    localStorage.removeItem('userCargo');
     authToken = null;
     showLogin();
 }

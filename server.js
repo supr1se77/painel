@@ -180,12 +180,38 @@ function authenticateToken(req, res, next) {
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
 
+  // Verificar admin
   if (username === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
     const token = jwt.sign({ username, role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '24h' });
     res.json({ token, message: 'Login realizado com sucesso', role: 'admin' });
-  } else {
-    res.status(401).json({ error: 'Credenciais inválidas' });
+    return;
   }
+
+  // Verificar equipe
+  db.get('SELECT * FROM equipe WHERE username = ?', [username], (err, row) => {
+    if (err) {
+      return res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+    
+    if (row && password === process.env.ADMIN_PASSWORD) {
+      const token = jwt.sign({ 
+        username: row.username, 
+        role: 'equipe',
+        nome: row.nome,
+        cargo: row.cargo
+      }, process.env.JWT_SECRET, { expiresIn: '24h' });
+      
+      res.json({ 
+        token, 
+        message: 'Login realizado com sucesso', 
+        role: 'equipe',
+        nome: row.nome,
+        cargo: row.cargo
+      });
+    } else {
+      res.status(401).json({ error: 'Credenciais inválidas' });
+    }
+  });
 });
 
 // API Routes
