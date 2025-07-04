@@ -493,79 +493,87 @@ app.post('/api/backup/create', authenticateToken, async (req, res) => {
     const estoque = await lerEstoque();
     const dados = JSON.stringify(estoque);
     const size = Buffer.byteLength(dados, 'utf8');
-    const created_at = new Date().toISOString();
     
-    const stmt = db.prepare('INSERT INTO backups (dados, size, created_at) VALUES (?, ?, ?)');
-    stmt.run(dados, size, created_at, function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Erro ao criar backup' });
-      }
-      
-      res.json({ 
-        message: 'Backup criado com sucesso',
-        id: this.lastID,
-        size,
-        created_at
-      });
+    const result = await pool.query(
+      'INSERT INTO backups (dados, size) VALUES ($1, $2) RETURNING *',
+      [dados, size]
+    );
+    
+    res.json({ 
+      message: 'Backup criado com sucesso',
+      id: result.rows[0].id,
+      size,
+      created_at: result.rows[0].created_at
     });
-    stmt.finalize();
   } catch (error) {
+    console.error('Erro ao criar backup:', error);
     res.status(500).json({ error: 'Erro ao criar backup' });
   }
 });
 
-app.get('/api/backup/list', authenticateToken, (req, res) => {
-  db.all('SELECT id, size, created_at FROM backups ORDER BY created_at DESC LIMIT 10', (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: 'Erro ao listar backups' });
-    }
-    res.json(rows);
-  });
+app.get('/api/backup/list', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, size, created_at FROM backups ORDER BY created_at DESC LIMIT 10'
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Erro ao listar backups:', error);
+    res.status(500).json({ error: 'Erro ao listar backups' });
+  }
 });
 
-app.get('/api/backup/download/:id', authenticateToken, (req, res) => {
+app.get('/api/backup/download/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   
-  db.get('SELECT dados FROM backups WHERE id = ?', [id], (err, row) => {
-    if (err) {
-      return res.status(500).json({ error: 'Erro ao buscar backup' });
-    }
+  try {
+    const result = await pool.query('SELECT dados FROM backups WHERE id = $1', [id]);
     
-    if (!row) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Backup não encontrado' });
     }
     
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename=backup-${id}.json`);
-    res.send(row.dados);
-  });
+    res.send(result.rows[0].dados);
+  } catch (error) {
+    console.error('Erro ao buscar backup:', error);
+    res.status(500).json({ error: 'Erro ao buscar backup' });
+  }
 });
 
 // Rotas do sistema de vendas
-app.get('/api/sales/stats', authenticateToken, (req, res) => {
+app.get('/api/sales/stats', authenticateToken, async (req, res) => {
   const today = new Date().toISOString().split('T')[0];
   
-  db.all(`
-    SELECT 
-      COUNT(*) as totalSales,
-      COALESCE(SUM(price), 0) as totalRevenue,
-      COUNT(DISTINCT customer_id) as totalCustomers,
-      COALESCE(SUM(CASE WHEN DATE(created_at) = ? THEN price ELSE 0 END), 0) as todayRevenue
-    FROM sales
-  `, [today], (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: 'Erro ao buscar estatísticas' });
-    }
+  try {
+    const result = await pool.query(`
+      SELECT 
+        COUNT(*) as totalsales,
+        COALESCE(SUM(price), 0) as totalrevenue,
+        COUNT(DISTINCT customer_id) as totalcustomers,
+        COALESCE(SUM(CASE WHEN DATE(created_at) = $1 THEN price ELSE 0 END), 0) as todayrevenue
+      FROM sales
+    `, [today]);
     
-    const stats = rows[0] || {
-      totalSales: 0,
-      totalRevenue: 0,
-      totalCustomers: 0,
-      todayRevenue: 0
+    const stats = result.rows[0] || {
+      totalsales: 0,
+      totalrevenue: 0,
+      totalcustomers: 0,
+      todayrevenue: 0
     };
     
-    res.json(stats);
-  });
+    // Converter para formato esperado pelo frontend
+    res.json({
+      totalSales: parseInt(stats.totalsales),
+      totalRevenue: parseFloat(stats.totalrevenue),
+      totalCustomers: parseInt(stats.totalcustomers),
+      todayRevenue: parseFloat(stats.todayrevenue)
+    });
+  } catch (error) {
+    console.error('Erro ao buscar estatísticas:', error);
+    res.status(500).json({ error: 'Erro ao buscar estatísticas' });
+  }
 });
 
 app.get('/api/sales/history', authenticateToken, (req, res) => {
