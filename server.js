@@ -39,11 +39,26 @@ app.use(limiter);
 // Servir arquivos estáticos (painel web)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Banco de dados SQLite
-const db = new sqlite3.Database('estoque.db');
+// Banco de dados SQLite com caminho persistente
+const dbPath = process.env.NODE_ENV === 'production' ? '/app/data/estoque.db' : './estoque.db';
+const db = new sqlite3.Database(dbPath);
 
-// Inicializar banco
+// Criar diretório de dados se não existir
+if (process.env.NODE_ENV === 'production') {
+  const dataDir = '/app/data';
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+}
+
+// Inicializar banco com WAL mode para melhor persistência
 db.serialize(() => {
+  // Configurar WAL mode para melhor persistência
+  db.run('PRAGMA journal_mode=WAL;');
+  db.run('PRAGMA synchronous=NORMAL;');
+  db.run('PRAGMA cache_size=1000;');
+  db.run('PRAGMA temp_store=memory;');
+  
   db.run(`CREATE TABLE IF NOT EXISTS estoque (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     categoria TEXT UNIQUE,
@@ -75,7 +90,14 @@ db.serialize(() => {
     price REAL,
     created_at TEXT
   )`);
+  
+  console.log(`Banco de dados inicializado em: ${dbPath}`);
 });
+
+// Forçar sincronização do banco a cada 30 segundos
+setInterval(() => {
+  db.run('PRAGMA wal_checkpoint(TRUNCATE);');
+}, 30000);
 
 // Funções utilitárias
 function lerEstoque() {
@@ -105,8 +127,9 @@ function lerEstoque() {
 }
 
 function salvarEstoque(estoque) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     db.serialize(() => {
+      db.run('BEGIN TRANSACTION');
       db.run('DELETE FROM estoque');
       
       const stmt = db.prepare('INSERT INTO estoque (categoria, dados, preco) VALUES (?, ?, ?)');
@@ -116,8 +139,23 @@ function salvarEstoque(estoque) {
         stmt.run(categoria, JSON.stringify(dados), preco || 0);
       }
       
-      stmt.finalize();
-      resolve();
+      stmt.finalize((err) => {
+        if (err) {
+          db.run('ROLLBACK');
+          reject(err);
+        } else {
+          db.run('COMMIT', (commitErr) => {
+            if (commitErr) {
+              reject(commitErr);
+            } else {
+              // Forçar sincronização
+              db.run('PRAGMA wal_checkpoint(TRUNCATE);');
+              console.log('Estoque salvo e sincronizado');
+              resolve();
+            }
+          });
+        }
+      });
     });
   });
 }
@@ -617,6 +655,34 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('Fechando banco de dados...');
+  db.run('PRAGMA wal_checkpoint(TRUNCATE);');
+  db.close((err) => {
+    if (err) {
+      console.error('Erro ao fechar banco:', err);
+    } else {
+      console.log('Banco fechado com sucesso');
+    }
+    process.exit(0);
+  });
+});
+
+process.on('SIGTERM', () => {
+  console.log('Fechando banco de dados...');
+  db.run('PRAGMA wal_checkpoint(TRUNCATE);');
+  db.close((err) => {
+    if (err) {
+      console.error('Erro ao fechar banco:', err);
+    } else {
+      console.log('Banco fechado com sucesso');
+    }
+    process.exit(0);
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
+  console.log(`Banco de dados: ${dbPath}`);
 });
