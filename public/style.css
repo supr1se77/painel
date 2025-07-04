@@ -296,54 +296,62 @@ body::before {
 
 /* Stats Cards */
 .stats-card {
-    background: linear-gradient(135deg, rgba(120, 119, 198, 0.8) 0%, rgba(255, 119, 198, 0.8) 100%);
+    background: rgba(26, 26, 46, 0.8);
     backdrop-filter: blur(20px);
     color: white;
-    border-radius: 20px;
-    padding: 2rem;
+    border-radius: 15px;
+    padding: 1.8rem;
     margin-bottom: 1rem;
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid rgba(120, 119, 198, 0.2);
     position: relative;
     overflow: hidden;
-    animation: statsFloat 4s ease-in-out infinite;
+    transition: all 0.3s ease;
 }
 
 .stats-card::before {
     content: '';
     position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
-    animation: statsShine 3s linear infinite;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #7877c6, #ff77c6, #77c6ff);
+    background-size: 200% 100%;
+    animation: borderMove 3s linear infinite;
 }
 
-@keyframes statsFloat {
-    0%, 100% { transform: translateY(0px) scale(1); }
-    50% { transform: translateY(-5px) scale(1.02); }
+.stats-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(120, 119, 198, 0.4);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3), 0 0 20px rgba(120, 119, 198, 0.1);
 }
 
-@keyframes statsShine {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+@keyframes borderMove {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
 }
 
 .stats-card h3 {
-    font-size: 2.5rem;
-    font-weight: 900;
+    font-size: 2.2rem;
+    font-weight: 700;
     margin-bottom: 0.5rem;
-    text-shadow: 0 0 10px rgba(255,255,255,0.5);
+    color: #fff;
     position: relative;
     z-index: 1;
 }
 
 .stats-card p {
     margin: 0;
-    opacity: 0.95;
+    color: rgba(255,255,255,0.8);
     font-weight: 500;
+    font-size: 0.95rem;
     position: relative;
     z-index: 1;
+}
+
+.stats-card i {
+    color: rgba(120, 119, 198, 0.8);
+    margin-right: 8px;
 }
 
 /* Category Cards */
