@@ -174,12 +174,11 @@ app.post('/api/login', async (req, res) => {
   }
 
   // Verificar equipe
-  db.get('SELECT * FROM equipe WHERE username = ?', [username], (err, row) => {
-    if (err) {
-      return res.status(500).json({ error: 'Erro interno do servidor' });
-    }
+  try {
+    const result = await pool.query('SELECT * FROM equipe WHERE username = $1', [username]);
     
-    if (row && password === process.env.ADMIN_PASSWORD) {
+    if (result.rows.length > 0 && password === process.env.ADMIN_PASSWORD) {
+      const row = result.rows[0];
       const token = jwt.sign({ 
         username: row.username, 
         role: 'equipe',
@@ -197,7 +196,10 @@ app.post('/api/login', async (req, res) => {
     } else {
       res.status(401).json({ error: 'Credenciais inválidas' });
     }
-  });
+  } catch (error) {
+    console.error('Erro no login:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
 });
 
 // API Routes
@@ -432,60 +434,57 @@ app.post('/api/estoque/import', authenticateToken, async (req, res) => {
 });
 
 // Rotas da equipe
-app.get('/api/equipe', authenticateToken, (req, res) => {
-  db.all('SELECT * FROM equipe', (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: 'Erro ao buscar equipe' });
-    }
-    res.json(rows);
-  });
+app.get('/api/equipe', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM equipe ORDER BY id DESC');
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Erro ao buscar equipe:', error);
+    res.status(500).json({ error: 'Erro ao buscar equipe' });
+  }
 });
 
-app.post('/api/equipe', authenticateToken, (req, res) => {
+app.post('/api/equipe', authenticateToken, async (req, res) => {
   const { username, nome, cargo } = req.body;
   
   if (!username || !nome) {
     return res.status(400).json({ error: 'Username e nome são obrigatórios' });
   }
   
-  const stmt = db.prepare('INSERT INTO equipe (username, nome, cargo, adicionadoEm) VALUES (?, ?, ?, ?)');
-  stmt.run(username, nome, cargo || 'Membro', new Date().toISOString(), function(err) {
-    if (err) {
-      if (err.code === 'SQLITE_CONSTRAINT') {
-        return res.status(400).json({ error: 'Username já existe' });
-      }
-      return res.status(500).json({ error: 'Erro ao adicionar membro' });
+  try {
+    const result = await pool.query(
+      'INSERT INTO equipe (username, nome, cargo) VALUES ($1, $2, $3) RETURNING *',
+      [username, nome, cargo || 'Membro']
+    );
+    
+    res.json({ 
+      message: 'Membro adicionado com sucesso', 
+      membro: result.rows[0] 
+    });
+  } catch (error) {
+    if (error.code === '23505') { // Unique constraint violation
+      return res.status(400).json({ error: 'Username já existe' });
     }
-    
-    const novoMembro = {
-      id: this.lastID,
-      username,
-      nome,
-      cargo: cargo || 'Membro',
-      adicionadoEm: new Date().toISOString()
-    };
-    
-    res.json({ message: 'Membro adicionado com sucesso', membro: novoMembro });
-  });
-  stmt.finalize();
+    console.error('Erro ao adicionar membro:', error);
+    res.status(500).json({ error: 'Erro ao adicionar membro' });
+  }
 });
 
-app.delete('/api/equipe/:id', authenticateToken, (req, res) => {
+app.delete('/api/equipe/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   
-  const stmt = db.prepare('DELETE FROM equipe WHERE id = ?');
-  stmt.run(id, function(err) {
-    if (err) {
-      return res.status(500).json({ error: 'Erro ao remover membro' });
-    }
+  try {
+    const result = await pool.query('DELETE FROM equipe WHERE id = $1', [id]);
     
-    if (this.changes === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Membro não encontrado' });
     }
     
     res.json({ message: 'Membro removido com sucesso' });
-  });
-  stmt.finalize();
+  } catch (error) {
+    console.error('Erro ao remover membro:', error);
+    res.status(500).json({ error: 'Erro ao remover membro' });
+  }
 });
 
 // Rotas de backup
