@@ -58,6 +58,13 @@ db.serialize(() => {
     cargo TEXT,
     adicionadoEm TEXT
   )`);
+  
+  db.run(`CREATE TABLE IF NOT EXISTS backups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dados TEXT,
+    size INTEGER,
+    created_at TEXT
+  )`);
 });
 
 // Funções utilitárias
@@ -419,6 +426,60 @@ app.delete('/api/equipe/:id', authenticateToken, (req, res) => {
     res.json({ message: 'Membro removido com sucesso' });
   });
   stmt.finalize();
+});
+
+// Rotas de backup
+app.post('/api/backup/create', authenticateToken, async (req, res) => {
+  try {
+    const estoque = await lerEstoque();
+    const dados = JSON.stringify(estoque);
+    const size = Buffer.byteLength(dados, 'utf8');
+    const created_at = new Date().toISOString();
+    
+    const stmt = db.prepare('INSERT INTO backups (dados, size, created_at) VALUES (?, ?, ?)');
+    stmt.run(dados, size, created_at, function(err) {
+      if (err) {
+        return res.status(500).json({ error: 'Erro ao criar backup' });
+      }
+      
+      res.json({ 
+        message: 'Backup criado com sucesso',
+        id: this.lastID,
+        size,
+        created_at
+      });
+    });
+    stmt.finalize();
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao criar backup' });
+  }
+});
+
+app.get('/api/backup/list', authenticateToken, (req, res) => {
+  db.all('SELECT id, size, created_at FROM backups ORDER BY created_at DESC LIMIT 10', (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: 'Erro ao listar backups' });
+    }
+    res.json(rows);
+  });
+});
+
+app.get('/api/backup/download/:id', authenticateToken, (req, res) => {
+  const { id } = req.params;
+  
+  db.get('SELECT dados FROM backups WHERE id = ?', [id], (err, row) => {
+    if (err) {
+      return res.status(500).json({ error: 'Erro ao buscar backup' });
+    }
+    
+    if (!row) {
+      return res.status(404).json({ error: 'Backup não encontrado' });
+    }
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename=backup-${id}.json`);
+    res.send(row.dados);
+  });
 });
 
 // Servir o painel web na rota raiz

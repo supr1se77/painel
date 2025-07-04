@@ -696,6 +696,10 @@ body::before {
     background: linear-gradient(45deg, rgba(119, 198, 255, 0.2), rgba(119, 198, 255, 0.1));
 }
 
+.control-btn-backup:hover {
+    background: linear-gradient(45deg, rgba(39, 174, 96, 0.2), rgba(39, 174, 96, 0.1));
+}
+
 .control-btn-warning:hover {
     background: linear-gradient(45deg, rgba(243, 156, 18, 0.2), rgba(243, 156, 18, 0.1));
 }

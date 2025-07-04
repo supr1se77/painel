@@ -825,6 +825,133 @@ function showAlert(message, type) {
     }, 5000);
 }
 
+// Funções de backup
+function showBackupModal() {
+    const modal = new bootstrap.Modal(document.getElementById('backupModal'));
+    loadBackupList();
+    modal.show();
+}
+
+async function createBackup() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/backup/create`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showAlert('Backup criado com sucesso!', 'success');
+            loadBackupList();
+        } else {
+            showAlert(data.error || 'Erro ao criar backup', 'danger');
+        }
+    } catch (error) {
+        showAlert('Erro de conexão', 'danger');
+        console.error('Erro:', error);
+    }
+}
+
+async function loadBackupList() {
+    const backupList = document.getElementById('backupList');
+    backupList.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm"></div> Carregando...</div>';
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/backup/list`, {
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        
+        if (response.ok) {
+            const backups = await response.json();
+            displayBackupList(backups);
+        } else {
+            backupList.innerHTML = '<div class="alert alert-danger">Erro ao carregar backups</div>';
+        }
+    } catch (error) {
+        backupList.innerHTML = '<div class="alert alert-danger">Erro de conexão</div>';
+        console.error('Erro:', error);
+    }
+}
+
+function displayBackupList(backups) {
+    const backupList = document.getElementById('backupList');
+    
+    if (backups.length === 0) {
+        backupList.innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-archive fa-3x mb-3" style="color: rgba(120, 119, 198, 0.5);"></i>
+                <h6 style="color: rgba(255,255,255,0.8);">Nenhum backup encontrado</h6>
+                <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem;">Crie seu primeiro backup acima</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '<div class="row">';
+    
+    backups.forEach(backup => {
+        const data = new Date(backup.created_at).toLocaleString('pt-BR');
+        const tamanho = (backup.size / 1024).toFixed(1);
+        
+        html += `
+            <div class="col-md-6 mb-3">
+                <div class="card" style="background: rgba(26, 26, 46, 0.6); border: 1px solid rgba(120, 119, 198, 0.2);">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1" style="color: #fff;">Backup #${backup.id}</h6>
+                                <p class="mb-1" style="color: rgba(255,255,255,0.7); font-size: 0.9rem;">
+                                    <i class="fas fa-calendar me-1"></i>${data}
+                                </p>
+                                <small style="color: rgba(255,255,255,0.6);">
+                                    <i class="fas fa-database me-1"></i>${tamanho} KB
+                                </small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" onclick="downloadBackup(${backup.id})" title="Baixar backup">
+                                <i class="fas fa-download"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    backupList.innerHTML = html;
+}
+
+async function downloadBackup(backupId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/backup/download/${backupId}`, {
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `backup-${backupId}-${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            window.URL.revokeObjectURL(url);
+            showAlert('Backup baixado com sucesso!', 'success');
+        } else {
+            showAlert('Erro ao baixar backup', 'danger');
+        }
+    } catch (error) {
+        showAlert('Erro de conexão', 'danger');
+        console.error('Erro:', error);
+    }
+}
+
 // Funções de sincronização
 function exportEstoque() {
     const link = document.createElement('a');

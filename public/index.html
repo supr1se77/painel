@@ -137,6 +137,14 @@
                                             <div class="btn-desc">Gerenciar membros da equipe</div>
                                         </div>
                                     </button>
+                                    
+                                    <button class="btn control-btn control-btn-backup w-100 mb-3" onclick="showBackupModal()">
+                                        <div class="btn-icon"><i class="fas fa-shield-alt"></i></div>
+                                        <div class="btn-content">
+                                            <div class="btn-title">Backup Seguro</div>
+                                            <div class="btn-desc">Criar e gerenciar backups</div>
+                                        </div>
+                                    </button>
                                 </div>
                                 
                                 <div class="system-info">
@@ -360,6 +368,62 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                     <button type="button" class="btn btn-primary" onclick="importEstoque()">Importar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backup Modal -->
+    <div class="modal fade" id="backupModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-shield-alt me-2"></i>Backup Seguro do Estoque</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card" style="background: rgba(120, 119, 198, 0.1); border: 1px solid rgba(120, 119, 198, 0.3);">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="fas fa-plus-circle me-2"></i>Criar Novo Backup</h6>
+                                </div>
+                                <div class="card-body text-center">
+                                    <p style="color: rgba(255,255,255,0.8); margin-bottom: 20px;">Crie um backup seguro do seu estoque atual</p>
+                                    <button class="btn btn-success" onclick="createBackup()">
+                                        <i class="fas fa-download me-2"></i>Criar Backup Agora
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card" style="background: rgba(255, 119, 198, 0.1); border: 1px solid rgba(255, 119, 198, 0.3);">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="fas fa-clock me-2"></i>Backup Automático</h6>
+                                </div>
+                                <div class="card-body text-center">
+                                    <p style="color: rgba(255,255,255,0.8); margin-bottom: 20px;">Backup automático a cada alteração</p>
+                                    <span class="badge" style="background: #27ae60; font-size: 0.9rem; padding: 8px 15px;">
+                                        <i class="fas fa-check-circle me-1"></i>Ativo
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="fas fa-history me-2"></i>Histórico de Backups</h6>
+                        </div>
+                        <div class="card-body">
+                            <div id="backupList">
+                                <!-- Lista será carregada aqui -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
                 </div>
             </div>
         </div>
