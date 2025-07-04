@@ -364,6 +364,63 @@ app.post('/api/estoque/import', authenticateToken, async (req, res) => {
   }
 });
 
+// Rotas da equipe
+app.get('/api/equipe', authenticateToken, (req, res) => {
+  db.all('SELECT * FROM equipe', (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: 'Erro ao buscar equipe' });
+    }
+    res.json(rows);
+  });
+});
+
+app.post('/api/equipe', authenticateToken, (req, res) => {
+  const { username, nome, cargo } = req.body;
+  
+  if (!username || !nome) {
+    return res.status(400).json({ error: 'Username e nome são obrigatórios' });
+  }
+  
+  const stmt = db.prepare('INSERT INTO equipe (username, nome, cargo, adicionadoEm) VALUES (?, ?, ?, ?)');
+  stmt.run(username, nome, cargo || 'Membro', new Date().toISOString(), function(err) {
+    if (err) {
+      if (err.code === 'SQLITE_CONSTRAINT') {
+        return res.status(400).json({ error: 'Username já existe' });
+      }
+      return res.status(500).json({ error: 'Erro ao adicionar membro' });
+    }
+    
+    const novoMembro = {
+      id: this.lastID,
+      username,
+      nome,
+      cargo: cargo || 'Membro',
+      adicionadoEm: new Date().toISOString()
+    };
+    
+    res.json({ message: 'Membro adicionado com sucesso', membro: novoMembro });
+  });
+  stmt.finalize();
+});
+
+app.delete('/api/equipe/:id', authenticateToken, (req, res) => {
+  const { id } = req.params;
+  
+  const stmt = db.prepare('DELETE FROM equipe WHERE id = ?');
+  stmt.run(id, function(err) {
+    if (err) {
+      return res.status(500).json({ error: 'Erro ao remover membro' });
+    }
+    
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Membro não encontrado' });
+    }
+    
+    res.json({ message: 'Membro removido com sucesso' });
+  });
+  stmt.finalize();
+});
+
 // Servir o painel web na rota raiz
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
