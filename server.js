@@ -576,97 +576,93 @@ app.get('/api/sales/stats', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/sales/history', authenticateToken, (req, res) => {
-  db.all('SELECT * FROM sales ORDER BY created_at DESC LIMIT 50', (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: 'Erro ao buscar histórico' });
-    }
-    res.json(rows);
-  });
+app.get('/api/sales/history', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM sales ORDER BY created_at DESC LIMIT 50');
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Erro ao buscar histórico:', error);
+    res.status(500).json({ error: 'Erro ao buscar histórico' });
+  }
 });
 
-app.get('/api/sales/customers', authenticateToken, (req, res) => {
-  db.all(`
-    SELECT 
-      customer_id,
-      customer_name as name,
-      COUNT(*) as total_purchases,
-      SUM(price) as total_spent,
-      MAX(created_at) as last_purchase
-    FROM sales 
-    GROUP BY customer_id, customer_name 
-    ORDER BY total_spent DESC
-  `, (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: 'Erro ao buscar clientes' });
-    }
-    res.json(rows);
-  });
-});
-
-app.get('/api/sales/analytics', authenticateToken, (req, res) => {
-  const queries = {
-    topProducts: `
+app.get('/api/sales/customers', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(`
       SELECT 
-        product_name as name,
-        category,
-        COUNT(*) as sales_count,
-        SUM(price) as total_revenue
-      FROM sales 
-      GROUP BY product_name, category 
-      ORDER BY sales_count DESC 
-      LIMIT 5
-    `,
-    topCustomers: `
-      SELECT 
+        customer_id,
         customer_name as name,
         COUNT(*) as total_purchases,
-        SUM(price) as total_spent
+        SUM(price) as total_spent,
+        MAX(created_at) as last_purchase
       FROM sales 
       GROUP BY customer_id, customer_name 
-      ORDER BY total_spent DESC 
-      LIMIT 5
-    `
-  };
-  
-  const results = {};
-  let completed = 0;
-  
-  Object.keys(queries).forEach(key => {
-    db.all(queries[key], (err, rows) => {
-      if (!err) {
-        results[key] = rows;
-      } else {
-        results[key] = [];
-      }
-      
-      completed++;
-      if (completed === Object.keys(queries).length) {
-        res.json(results);
-      }
-    });
-  });
+      ORDER BY total_spent DESC
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Erro ao buscar clientes:', error);
+    res.status(500).json({ error: 'Erro ao buscar clientes' });
+  }
 });
 
-app.post('/api/sales/add', authenticateToken, (req, res) => {
+app.get('/api/sales/analytics', authenticateToken, async (req, res) => {
+  try {
+    const [topProductsResult, topCustomersResult] = await Promise.all([
+      pool.query(`
+        SELECT 
+          product_name as name,
+          category,
+          COUNT(*) as sales_count,
+          SUM(price) as total_revenue
+        FROM sales 
+        GROUP BY product_name, category 
+        ORDER BY sales_count DESC 
+        LIMIT 5
+      `),
+      pool.query(`
+        SELECT 
+          customer_name as name,
+          COUNT(*) as total_purchases,
+          SUM(price) as total_spent
+        FROM sales 
+        GROUP BY customer_id, customer_name 
+        ORDER BY total_spent DESC 
+        LIMIT 5
+      `)
+    ]);
+    
+    res.json({
+      topProducts: topProductsResult.rows,
+      topCustomers: topCustomersResult.rows
+    });
+  } catch (error) {
+    console.error('Erro ao buscar analytics:', error);
+    res.status(500).json({ error: 'Erro ao buscar analytics' });
+  }
+});
+
+app.post('/api/sales/add', authenticateToken, async (req, res) => {
   const { customer_id, customer_name, product_name, category, price } = req.body;
   
   if (!customer_id || !customer_name || !product_name || !price) {
     return res.status(400).json({ error: 'Dados obrigatórios faltando' });
   }
   
-  const stmt = db.prepare('INSERT INTO sales (customer_id, customer_name, product_name, category, price, created_at) VALUES (?, ?, ?, ?, ?, ?)');
-  stmt.run(customer_id, customer_name, product_name, category, price, new Date().toISOString(), function(err) {
-    if (err) {
-      return res.status(500).json({ error: 'Erro ao registrar venda' });
-    }
+  try {
+    const result = await pool.query(
+      'INSERT INTO sales (customer_id, customer_name, product_name, category, price) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [customer_id, customer_name, product_name, category, price]
+    );
     
     res.json({ 
       message: 'Venda registrada com sucesso',
-      id: this.lastID
+      id: result.rows[0].id
     });
-  });
-  stmt.finalize();
+  } catch (error) {
+    console.error('Erro ao registrar venda:', error);
+    res.status(500).json({ error: 'Erro ao registrar venda' });
+  }
 });
 
 // Servir o painel web na rota raiz
