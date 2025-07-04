@@ -6,7 +6,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
-const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 require('dotenv').config();
 
 const app = express();
@@ -39,125 +39,111 @@ app.use(limiter);
 // Servir arquivos estáticos (painel web)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Banco de dados SQLite com caminho persistente
-const dbPath = process.env.NODE_ENV === 'production' ? '/app/data/estoque.db' : './estoque.db';
-const db = new sqlite3.Database(dbPath);
+// Banco de dados PostgreSQL
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/legacy_bot',
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
-// Criar diretório de dados se não existir
-if (process.env.NODE_ENV === 'production') {
-  const dataDir = '/app/data';
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+// Inicializar banco PostgreSQL
+async function initDatabase() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS estoque (
+        id SERIAL PRIMARY KEY,
+        categoria VARCHAR(255) UNIQUE,
+        dados TEXT,
+        preco DECIMAL(10,2) DEFAULT 0
+      )
+    `);
+    
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS equipe (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(255) UNIQUE,
+        nome VARCHAR(255),
+        cargo VARCHAR(255),
+        adicionadoEm TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS backups (
+        id SERIAL PRIMARY KEY,
+        dados TEXT,
+        size INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sales (
+        id SERIAL PRIMARY KEY,
+        customer_id VARCHAR(255),
+        customer_name VARCHAR(255),
+        product_name VARCHAR(255),
+        category VARCHAR(255),
+        price DECIMAL(10,2),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    console.log('Banco PostgreSQL inicializado com sucesso!');
+  } catch (error) {
+    console.error('Erro ao inicializar banco:', error);
   }
 }
 
-// Inicializar banco com WAL mode para melhor persistência
-db.serialize(() => {
-  // Configurar WAL mode para melhor persistência
-  db.run('PRAGMA journal_mode=WAL;');
-  db.run('PRAGMA synchronous=NORMAL;');
-  db.run('PRAGMA cache_size=1000;');
-  db.run('PRAGMA temp_store=memory;');
-  
-  db.run(`CREATE TABLE IF NOT EXISTS estoque (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    categoria TEXT UNIQUE,
-    dados TEXT,
-    preco REAL DEFAULT 0
-  )`);
-  
-  db.run(`CREATE TABLE IF NOT EXISTS equipe (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE,
-    nome TEXT,
-    cargo TEXT,
-    adicionadoEm TEXT
-  )`);
-  
-  db.run(`CREATE TABLE IF NOT EXISTS backups (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    dados TEXT,
-    size INTEGER,
-    created_at TEXT
-  )`);
-  
-  db.run(`CREATE TABLE IF NOT EXISTS sales (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_id TEXT,
-    customer_name TEXT,
-    product_name TEXT,
-    category TEXT,
-    price REAL,
-    created_at TEXT
-  )`);
-  
-  console.log(`Banco de dados inicializado em: ${dbPath}`);
-});
-
-// Forçar sincronização do banco a cada 30 segundos
-setInterval(() => {
-  db.run('PRAGMA wal_checkpoint(TRUNCATE);');
-}, 30000);
+initDatabase();
 
 // Funções utilitárias
-function lerEstoque() {
-  return new Promise((resolve) => {
-    db.all('SELECT * FROM estoque', (err, rows) => {
-      if (err) {
-        console.error('Erro ao ler estoque:', err);
-        resolve({});
-        return;
+async function lerEstoque() {
+  try {
+    const result = await pool.query('SELECT * FROM estoque');
+    const estoque = {};
+    
+    result.rows.forEach(row => {
+      try {
+        const dados = JSON.parse(row.dados);
+        estoque[row.categoria] = {
+          ...dados,
+          preco: parseFloat(row.preco)
+        };
+      } catch (e) {
+        console.error('Erro ao parsear dados:', e);
       }
-      
-      const estoque = {};
-      rows.forEach(row => {
-        try {
-          const dados = JSON.parse(row.dados);
-          estoque[row.categoria] = {
-            ...dados,
-            preco: row.preco
-          };
-        } catch (e) {
-          console.error('Erro ao parsear dados:', e);
-        }
-      });
-      resolve(estoque);
     });
-  });
+    
+    return estoque;
+  } catch (error) {
+    console.error('Erro ao ler estoque:', error);
+    return {};
+  }
 }
 
-function salvarEstoque(estoque) {
-  return new Promise((resolve, reject) => {
-    db.serialize(() => {
-      db.run('BEGIN TRANSACTION');
-      db.run('DELETE FROM estoque');
-      
-      const stmt = db.prepare('INSERT INTO estoque (categoria, dados, preco) VALUES (?, ?, ?)');
-      
-      for (const categoria in estoque) {
-        const { preco, ...dados } = estoque[categoria];
-        stmt.run(categoria, JSON.stringify(dados), preco || 0);
-      }
-      
-      stmt.finalize((err) => {
-        if (err) {
-          db.run('ROLLBACK');
-          reject(err);
-        } else {
-          db.run('COMMIT', (commitErr) => {
-            if (commitErr) {
-              reject(commitErr);
-            } else {
-              // Forçar sincronização
-              db.run('PRAGMA wal_checkpoint(TRUNCATE);');
-              console.log('Estoque salvo e sincronizado');
-              resolve();
-            }
-          });
-        }
-      });
-    });
-  });
+async function salvarEstoque(estoque) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM estoque');
+    
+    for (const categoria in estoque) {
+      const { preco, ...dados } = estoque[categoria];
+      await client.query(
+        'INSERT INTO estoque (categoria, dados, preco) VALUES ($1, $2, $3)',
+        [categoria, JSON.stringify(dados), preco || 0]
+      );
+    }
+    
+    await client.query('COMMIT');
+    console.log('Estoque salvo com sucesso!');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Erro ao salvar estoque:', error);
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 // Middleware de autenticação
